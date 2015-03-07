@@ -1,34 +1,27 @@
 package general_monitor;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-//import java.io.OutputStream;
-import java.util.Enumeration;
-
 import gnu.io.CommPortIdentifier;
 import gnu.io.SerialPort;
 import gnu.io.SerialPortEvent;
 import gnu.io.SerialPortEventListener;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.util.Enumeration;
+
 public class SerialMonitor implements SerialPortEventListener {
 
 	SerialPort serialPort;
-	SerialInterface serialInterface;
-	/** The port we're normally going to use. */
-	private static final String PORT_NAMES[] = { "COM3", // Windows
-			"COM4", "COM5" // Windows
-	};
-	/**
-	 * A BufferedReader which will be fed by a InputStreamReader converting the
-	 * bytes into characters making the displayed results codepage independent
-	 */
 	private BufferedReader input;
-	// /** The output stream to the port */
-	// private OutputStream output;
+	private BufferedWriter output;
+
 	/** Milliseconds to block while waiting for port open */
 	private static final int TIME_OUT = 2000;
 	/** Default bits per second for COM port. */
-	private static final int DATA_RATE = 9600;
+	private static final int BAUD = 9600;
 
 	public void initialize() {
 
@@ -36,12 +29,11 @@ public class SerialMonitor implements SerialPortEventListener {
 		@SuppressWarnings("rawtypes")
 		Enumeration portEnum = CommPortIdentifier.getPortIdentifiers();
 
-		// First, Find an instance of serial port as set in PORT_NAMES.
+		// find serial port matching COMX, X = 1,2,...,9
 		while (portEnum.hasMoreElements()) {
-			CommPortIdentifier currPortId = (CommPortIdentifier) portEnum
-					.nextElement();
-			for (String portName : PORT_NAMES) {
-				if (currPortId.getName().equals(portName)) {
+			CommPortIdentifier currPortId = (CommPortIdentifier) portEnum.nextElement();
+			for (int i = 1; i < 10; i++) {
+				if (currPortId.getName().equals("COM" + Integer.toString(i))) {
 					portId = currPortId;
 					break;
 				}
@@ -54,25 +46,76 @@ public class SerialMonitor implements SerialPortEventListener {
 
 		try {
 			// open serial port, and use class name for the appName.
-			serialPort = (SerialPort) portId.open(this.getClass().getName(),
-					TIME_OUT);
+			serialPort = (SerialPort) portId.open(this.getClass().getName(), TIME_OUT);
 
 			// set port parameters
-			serialPort.setSerialPortParams(DATA_RATE, SerialPort.DATABITS_8,
-					SerialPort.STOPBITS_1, SerialPort.PARITY_NONE);
+			serialPort.setSerialPortParams(BAUD, SerialPort.DATABITS_8, SerialPort.STOPBITS_1,
+					SerialPort.PARITY_NONE);
 
 			// open the streams
-			input = new BufferedReader(new InputStreamReader(
-					serialPort.getInputStream()));
-			// output = serialPort.getOutputStream();
+			input = new BufferedReader(new InputStreamReader(serialPort.getInputStream()));
+			output = new BufferedWriter(new OutputStreamWriter(serialPort.getOutputStream()));
 
 			// add event listeners
 			serialPort.addEventListener(this);
 			serialPort.notifyOnDataAvailable(true);
+
 		} catch (Exception e) {
-			System.err.println(e.toString());
+			e.printStackTrace();
 		}
-		serialInterface = new SerialInterface();
+	}
+
+	/**
+	 * Handle an event on the serial port. Read the data and print it. Override
+	 * this.
+	 */
+	@Override
+	public synchronized void serialEvent(SerialPortEvent oEvent) {
+
+		if (oEvent.getEventType() == SerialPortEvent.DATA_AVAILABLE) {
+			String inputLine = readln();
+			if (inputLine != null)
+				System.out.println("Received: " + inputLine);
+		}
+
+		// Ignore all the other eventTypes, but you should consider the other
+		// ones.
+	}
+
+	/**
+	 * Sends int-encoded data through the serial port.
+	 * 
+	 * @param code
+	 */
+	public synchronized void sendData(int code) {
+		write(code);
+	}
+
+	public synchronized void write(int code) {
+		try {
+			output.write(Integer.toString(code));
+			output.flush();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+
+	public synchronized boolean serialReady() {
+		try {
+			return input.ready();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		return false;
+	}
+
+	public synchronized String readln() {
+		try {
+			return input.ready() ? input.readLine() : null;
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		return null;
 	}
 
 	/**
@@ -84,45 +127,5 @@ public class SerialMonitor implements SerialPortEventListener {
 			serialPort.removeEventListener();
 			serialPort.close();
 		}
-	}
-
-	/**
-	 * Handle an event on the serial port. Read the data and print it.
-	 */
-	@Override
-	public synchronized void serialEvent(SerialPortEvent oEvent) {
-		if (oEvent.getEventType() == SerialPortEvent.DATA_AVAILABLE) {
-			try {
-				String inputLine = input.ready() ? input.readLine() : null;
-				if (inputLine != null) {
-					System.out.println("Received: " + inputLine);
-					serialInterface.handleEvent(inputLine);
-				}
-
-			} catch (Exception e) {
-				e.printStackTrace();
-				// System.err.println(e.toString());
-			}
-		}
-	}
-
-	// Ignore all the other eventTypes, but you should consider the other
-	// ones.
-	public static void main(String[] args) throws Exception {
-		SerialMonitor main = new SerialMonitor();
-		main.initialize();
-		Thread t = new Thread() {
-			public void run() {
-				// the following line will keep this app alive for 1000 seconds,
-				// waiting for events to occur and responding to them (printing
-				// incoming messages to console).
-				try {
-					Thread.sleep(1000000);
-				} catch (InterruptedException ie) {
-				}
-			}
-		};
-		t.start();
-		System.out.println("Started");
 	}
 }
