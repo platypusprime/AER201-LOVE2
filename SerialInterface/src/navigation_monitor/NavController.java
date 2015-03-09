@@ -29,6 +29,7 @@ public class NavController extends SerialMonitor implements ActionListener {
 	private static final int SET_RSPD_R = 2000;
 	private static final int SET_LSPD_F = 3000;
 	private static final int SET_LSPD_R = 4000;
+	private static final int RECALIBRATE = 5000;
 
 	private static final int INCREMENT = 15;
 
@@ -36,7 +37,7 @@ public class NavController extends SerialMonitor implements ActionListener {
 	private JRadioButton[] sensorButtons;
 	private JLabel[] sensorLabels;
 	private JButton rSpdIncButton, rSpdDecButton, rSpdSetButton, lSpdIncButton, lSpdDecButton,
-			lSpdSetButton;
+			lSpdSetButton, calibrateButton;
 	private JTextField rSpdField, lSpdField;
 
 	// serial communication fields
@@ -87,50 +88,55 @@ public class NavController extends SerialMonitor implements ActionListener {
 			sensorLabels[i] = new JLabel(Integer.toString(i) + "000");
 			sensorPanel.add(sensorLabels[i]);
 		}
-		frame.add(sensorPanel, new GridBagConstraints(0, 0, 4, 1, 0.5, 0,
+		frame.add(sensorPanel, new GridBagConstraints(0, 1, 4, 1, 0.5, 0,
 				GridBagConstraints.CENTER, GridBagConstraints.NONE, new Insets(0, 0, 0, 0), 0, 0));
+
+		calibrateButton = new JButton("RECALIBRATE");
+		calibrateButton.addActionListener(this);
+		frame.add(calibrateButton, new GridBagConstraints(0, 0, 4, 1, 0, 0,
+				GridBagConstraints.CENTER, GridBagConstraints.BOTH, new Insets(0, 0, 0, 0), 0, 0));
 
 		// make motor control UI
 		lSpdIncButton = new JButton("+");
 		lSpdIncButton.addActionListener(this);
-		frame.add(lSpdIncButton, new GridBagConstraints(1, 1, 1, 1, 0, 0,
+		frame.add(lSpdIncButton, new GridBagConstraints(1, 2, 1, 1, 0, 0,
 				GridBagConstraints.CENTER, GridBagConstraints.BOTH, new Insets(0, 0, 0, 0), 0, 0));
 
 		lSpdField = new JTextField();
 		restrictFieldToNumbers(lSpdField);
 		lSpdField.setText("100");
-		frame.add(lSpdField, new GridBagConstraints(1, 2, 1, 1, 0, 0.5, GridBagConstraints.CENTER,
+		frame.add(lSpdField, new GridBagConstraints(1, 3, 1, 1, 0, 0.5, GridBagConstraints.CENTER,
 				GridBagConstraints.BOTH, new Insets(0, 0, 0, 0), 0, 0));
 
 		lSpdDecButton = new JButton("-");
 		lSpdDecButton.addActionListener(this);
-		frame.add(lSpdDecButton, new GridBagConstraints(1, 3, 1, 1, 0, 0,
+		frame.add(lSpdDecButton, new GridBagConstraints(1, 4, 1, 1, 0, 0,
 				GridBagConstraints.CENTER, GridBagConstraints.BOTH, new Insets(0, 0, 0, 0), 0, 0));
 
 		lSpdSetButton = new JButton("SET LSPD");
 		lSpdSetButton.addActionListener(this);
-		frame.add(lSpdSetButton, new GridBagConstraints(0, 2, 1, 1, 0, 0,
+		frame.add(lSpdSetButton, new GridBagConstraints(0, 3, 1, 1, 0, 0,
 				GridBagConstraints.CENTER, GridBagConstraints.BOTH, new Insets(0, 0, 0, 0), 0, 0));
 
 		rSpdIncButton = new JButton("+");
 		rSpdIncButton.addActionListener(this);
-		frame.add(rSpdIncButton, new GridBagConstraints(2, 1, 1, 1, 0, 0,
+		frame.add(rSpdIncButton, new GridBagConstraints(2, 2, 1, 1, 0, 0,
 				GridBagConstraints.CENTER, GridBagConstraints.BOTH, new Insets(0, 0, 0, 0), 0, 0));
 
 		rSpdField = new JTextField();
 		restrictFieldToNumbers(rSpdField);
 		rSpdField.setText("100");
-		frame.add(rSpdField, new GridBagConstraints(2, 2, 1, 1, 0, 0.5, GridBagConstraints.CENTER,
+		frame.add(rSpdField, new GridBagConstraints(2, 3, 1, 1, 0, 0.5, GridBagConstraints.CENTER,
 				GridBagConstraints.BOTH, new Insets(0, 0, 0, 0), 0, 0));
 
 		rSpdDecButton = new JButton("-");
 		rSpdDecButton.addActionListener(this);
-		frame.add(rSpdDecButton, new GridBagConstraints(2, 3, 1, 1, 0, 0,
+		frame.add(rSpdDecButton, new GridBagConstraints(2, 4, 1, 1, 0, 0,
 				GridBagConstraints.CENTER, GridBagConstraints.BOTH, new Insets(0, 0, 0, 0), 0, 0));
 
 		rSpdSetButton = new JButton("SET RSPD");
 		rSpdSetButton.addActionListener(this);
-		frame.add(rSpdSetButton, new GridBagConstraints(3, 2, 1, 1, 0, 0,
+		frame.add(rSpdSetButton, new GridBagConstraints(3, 3, 1, 1, 0, 0,
 				GridBagConstraints.CENTER, GridBagConstraints.BOTH, new Insets(0, 0, 0, 0), 0, 0));
 
 		frame.pack();
@@ -171,19 +177,18 @@ public class NavController extends SerialMonitor implements ActionListener {
 					// System.out.println(nextCmd + ":" + inputLine);
 					switch (nextCmd) {
 					case "S":
+						// get sensor number
 						numIn = Integer.parseInt(inputLine);
 						nextCmd = "S2";
 						break;
 					case "S2":
-						sensorButtons[numIn].setSelected(inputLine.equals("B"));
-						nextCmd = "NOCMD";
-						break;
-					case "V":
-						numIn = Integer.parseInt(inputLine);
-						nextCmd = "V2";
-						break;
-					case "V2":
+						// get analog sensor input
 						sensorLabels[numIn].setText(inputLine);
+						nextCmd = "S3";
+						break;
+					case "S3":
+						// get digital sensor input
+						sensorButtons[numIn].setSelected(inputLine.equals("B"));
 						nextCmd = "NOCMD";
 						break;
 					default:
@@ -202,8 +207,13 @@ public class NavController extends SerialMonitor implements ActionListener {
 
 		Object src = e.getSource();
 
+		// sensors need to be recalibrated
+		if (src == calibrateButton) {
+			write(RECALIBRATE);
+		}
+
 		// right motor speed needs to be set
-		if (src == rSpdIncButton || src == rSpdDecButton || src == rSpdSetButton) {
+		else if (src == rSpdIncButton || src == rSpdDecButton || src == rSpdSetButton) {
 			// clean text box contents
 			int rSpd = (rSpdField.getText().startsWith("-") ? -1 : 1)
 					* Integer.parseInt(rSpdField.getText().replaceAll("[\\D]", ""));
